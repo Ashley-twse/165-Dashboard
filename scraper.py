@@ -38,7 +38,7 @@ def fetch_and_send():
                 "inv_loss": inv_loss
             }
             
-            google_sheet_api_url = "https://script.google.com/macros/s/AKfycbwm7no7z08h4OxTNnVlu0R3k_pyYmS24YmJqVyzFgZePNCefe3O8LaC2nGMdGIlsGw/exec"
+            google_sheet_api_url = "https://script.google.com/macros/s/AKfycbwMRFlkro3Vi2j7g_bjB732ZIhmtDB-0_pxvreFGbQvXhqybT1xmG5rmbo_b79Si499/exec"
             
             sheet_response = requests.post(google_sheet_api_url, json=payload)
             print(f"Google Sheet 回應結果: {sheet_response.text}")
