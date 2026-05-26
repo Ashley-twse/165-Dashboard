@@ -46,8 +46,7 @@ def json_to_sheet():
         }
         
         # 🔥 你的專屬 Google Sheet 接收端網址 (確保使用最新綁定表的版本)
-        google_sheet_api_url = "https://script.google.com/macros/s/AKfycbxrln86Bf0gB0qONPqgpWFPNfWaW9hNJsx5xoK4jICMkuANXzwCQL4TrNECGoOUm0hf/exec"
-        
+        google_sheet_api_url ="https://script.google.com/macros/s/AKfycbxrln86Bf0gB0qONPqgpWFPNfWaW9hNJsx5xoK4jICMkuANXzwCQL4TrNECGoOUm0hf/exec"
         headers = {"Content-Type": "application/json"}
         post_res = requests.post(google_sheet_api_url, data=json.dumps(payload), headers=headers, timeout=15)
         
