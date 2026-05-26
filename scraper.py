@@ -1,8 +1,26 @@
 import requests
 import json
 
+def find_the_list(obj):
+    """【神級萬能鑰匙】全自動深度搜尋物件裡面的陣列資料"""
+    if isinstance(obj, list) and len(obj) > 0:
+        return obj
+    if isinstance(obj, dict):
+        # 優先尋找政府開放平台常見的幾種包裝欄位
+        for key in ['records', 'result', 'data', 'recordsGrid']:
+            if key in obj:
+                res = find_the_list(obj[key])
+                if res: return res
+        # 如果還是沒找到，就地毯式搜索任何含有陣列的欄位
+        for key, val in obj.items():
+            if isinstance(val, list) and len(val) > 0:
+                # 排除可能誤判的無用短列表
+                if isinstance(val[0], (dict, list)):
+                    return val
+    return None
+
 def json_to_sheet():
-    # 使用政府開放平台 167232 資料集的標準 JSON 直連網址
+    # 走 data.gov.tw 的 165 開放資料接口
     url = "https://data.gov.tw/api/v2/rest/dataset/167232"
     
     headers = {
@@ -15,37 +33,23 @@ def json_to_sheet():
         response.raise_for_status()
         res_data = response.json()
         
-        # 👑 核心破案：精準剝開政府資料的外殼
-        # 政府 API 格式通常是 {"success": true, "result": {"records": [...]}}
-        data_list = []
-        if isinstance(res_data, dict):
-            if 'result' in res_data and isinstance(res_data['result'], dict):
-                data_list = res_data['result'].get('records', [])
-            elif 'records' in res_data:
-                data_list = res_data['records']
-            else:
-                data_list = res_data.get('data', [])
-        elif isinstance(res_data, list):
-            data_list = res_data
+        # 👑 呼叫萬能搜尋器，強制把深藏在洋蔥核心的歷史資料陣列挖出來
+        data_list = find_the_list(res_data)
 
         if not data_list:
-            # 預備方案：如果外殼不對，直接把整個物件當成單筆處理，或者尋找任何列表
-            if isinstance(res_data, dict):
-                for key, val in res_data.items():
-                    if isinstance(val, list):
-                        data_list = val
-                        break
-        
-        if not data_list:
-            print("錯誤：無法拆解政府開放平臺的資料層級")
+            print("【終極防護啟動】無法解析到列表，印出原始包裝格式供 debug:")
+            print(str(res_data)[:500]) # 印出前500個字看格式
             return
 
         payload_list = []
-        print(f"成功剝離外殼！偵測到資料庫包含 {len(data_list)} 筆原始紀錄。正在對齊欄位...")
+        print(f"【成功破門】全自動定位出資料庫！共包含 {len(data_list)} 筆原始紀錄。開始對齊中文欄位...")
 
-        # 掃描前 5 筆資料，進行中英文欄位智慧配對
-        for item in data_list[:5]:
-            # 1. 尋找日期 (相容 統計日期, 統計日, date, Date)
+        # 掃描資料，進行欄位智慧配對
+        for item in data_list:
+            if not isinstance(item, dict):
+                continue
+                
+            # 1. 智慧尋找日期
             date_val = None
             for d_key in ['統計日期', '統計日', 'date', 'Date', '統計日前一天']:
                 if d_key in item and item[d_key]:
@@ -53,9 +57,9 @@ def json_to_sheet():
                     break
             
             if not date_val:
-                continue # 沒日期就跳過
+                continue # 沒日期的垃圾資料就跳過
                 
-            # 2. 尋找各項指標金額與件數 (自動過濾掉中文字、千分號，強制轉數字)
+            # 2. 智慧數字清理器（過濾掉中文文字、千分號，強制安全轉數字）
             def clean_num(val):
                 if val is None: return 0
                 cleaned = ''.join(c for c in str(val) if c.isdigit() or c == '.')
@@ -79,14 +83,14 @@ def json_to_sheet():
         sheet_headers = {"Content-Type": "application/json"}
         
         if not payload_list:
-            print("錯誤：未能成功辨識政府資料內的中文欄位名稱。")
-            # 終極相容：如果欄位真的完全找不到，列印出政府吐出來的第一筆資料結構，方便肉眼看
-            print(f"政府資料的第一筆結構為: {data_list[0]}")
+            print("錯誤：未能成功從物件中辨識出任何有效的 165 資料欄位。")
+            print(f"第一筆範例樣本為: {data_list[0]}")
             return
             
-        print(f"欄位對齊完畢！準備傳送 {len(payload_list)} 筆歷史資料至 Google Sheet...")
+        # 限制最多發送最近 5 筆，免得洗板
+        print(f"欄位智慧對齊成功！準備將最近 {min(len(payload_list), 5)} 筆歷史資料外送到 Google Sheet...")
         
-        for payload in payload_list:
+        for payload in payload_list[:5]:
             post_res = requests.post(google_sheet_api_url, data=json.dumps(payload), headers=sheet_headers, timeout=15)
             print(f"日期 {payload['date']} -> 傳送結果: {post_res.text}")
             
