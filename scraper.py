@@ -1,52 +1,61 @@
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
-def fetch_and_send():
-    url = "https://165dashboard.tw/api/v1/home/dashboard-data"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://165dashboard.tw/",
-        "Accept": "application/json, text/plain, */*"
-    }
+def json_to_sheet():
+    # 1. 取得昨天的日期 (台灣時間格式)
+    yesterday = (datetime.utcnow() + timedelta(hours=8) - timedelta(days=1)).strftime('%Y-%m-%d')
+    
+    # 2. 165 官方開放數據網址
+    url = "https://165.npa.gov.tw/api/open/daily-stats"
     
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        print(f"165 網站連線狀態碼: {response.status_code}")
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+        res_data = response.json()
         
-        if response.status_code == 200:
-            result = response.json()
-            data = result.get("data", {})
-            
-            stat_date = data.get("date", datetime.today().strftime('%Y-%m-%d'))
-            total_cases = data.get("total_cases", 0)       
-            total_loss = data.get("total_amount", 0)       
-            
-            fraud_types = data.get("fraud_types", [])
-            inv_cases, inv_loss = 0, 0
-            for item in fraud_types:
-                if "假投資" in item.get("name", ""):
-                    inv_cases = item.get("cases", 0)
-                    inv_loss = item.get("amount", 0)
+        # 智慧相容：自動尋找昨天的數據，若找不到則抓最新一筆
+        target_data = None
+        if isinstance(res_data, list) and len(res_data) > 0:
+            for row in res_data:
+                if row.get('date') == yesterday or row.get('Date') == yesterday:
+                    target_data = row
                     break
+            if not target_data:
+                target_data = res_data[0] # 備用方案：抓最新一筆
+        elif isinstance(res_data, dict):
+            target_data = res_data.get('data', res_data)
             
-            payload = {
-                "date": stat_date,
-                "total_cases": total_cases,
-                "total_loss": total_loss,
-                "inv_cases": inv_cases,
-                "inv_loss": inv_loss
-            }
-            
-            google_sheet_api_url = "https://script.google.com/macros/s/AKfycbxrln86Bf0gB0qONPqgpWFPNfWaW9hNJsx5xoK4jICMkuANXzwCQL4TrNECGoOUm0hf/exec"
-            
-            sheet_response = requests.post(google_sheet_api_url, json=payload)
-            print(f"Google Sheet 回應結果: {sheet_response.text}")
-            
-        else:
-            print(f"連線 165 失敗")
+        if not target_data:
+            print("錯誤：無法解析 165 官方數據結構")
+            return
+
+        # 智慧相容：欄位名稱大掃描 (相容大小寫與新舊名稱)
+        date_val = target_data.get('date', target_data.get('Date', yesterday))
+        total_cases = target_data.get('total_cases', target_data.get('totalCases', target_data.get('total_count', 0)))
+        total_loss = target_data.get('total_loss', target_data.get('totalLoss', target_data.get('total_amount', 0)))
+        inv_cases = target_data.get('inv_cases', target_data.get('invCases', target_data.get('investment_count', 0)))
+        inv_loss = target_data.get('inv_loss', target_data.get('invLoss', target_data.get('investment_amount', 0)))
+
+        payload = {
+            "date": date_val,
+            "total_cases": total_cases,
+            "total_loss": total_loss,
+            "inv_cases": inv_cases,
+            "inv_loss": inv_loss
+        }
+        
+        # 🔥 你的專屬 Google Sheet 接收端網址 (確保使用最新綁定表的版本)
+        google_sheet_api_url = "https://script.google.com/macros/s/AKfycbxrln86Bf0gB0qONPqgpWFPNfWaW9hNJsx5xoK4jICMkuANXzwCQL4TrNECGoOUm0hf/exec"
+        
+        headers = {"Content-Type": "application/json"}
+        post_res = requests.post(google_sheet_api_url, data=json.dumps(payload), headers=headers, timeout=15)
+        
+        print(f"發送數據: {payload}")
+        print(f"Google Sheet 回應結果: {post_res.text}")
+        
     except Exception as e:
-        print(f"執行過程中發生異常: {e}")
+        print(f"系統執行期間發生錯誤: {str(e)}")
 
 if __name__ == "__main__":
-    fetch_and_send()
+    json_to_sheet()
