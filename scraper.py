@@ -7,7 +7,7 @@ def json_to_sheet():
     yesterday = (datetime.utcnow() + timedelta(hours=8) - timedelta(days=1)).strftime('%Y-%m-%d')
     
     # 2. 165 官方開放數據網址
-    url = "https://165.npa.gov.tw/api/open/daily-stats"
+    url = "https://165dashboard.tw/fraud-method"
     
     try:
         response = requests.get(url, timeout=15)
